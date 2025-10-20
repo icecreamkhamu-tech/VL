@@ -1261,6 +1261,11 @@ footer {
   justify-content: center;
 }
 
+/* Audio Element for Remote Stream */
+#remoteAudio {
+  display: none;
+}
+
 /* Prevent any browser-induced scrolling */
 .messenger-container {
   overscroll-behavior-y: none;
@@ -1638,6 +1643,9 @@ footer {
     <button class="call-control-btn reject-btn" onclick="rejectIncomingCall()">📵</button>
   </div>
 </div>
+
+<!-- Audio Element for Remote Stream -->
+<audio id="remoteAudio" autoplay></audio>
 
 <footer>© 2025 GEN-Z Chat • All rights reserved</footer>
 
@@ -2377,9 +2385,9 @@ function formatTime(timestamp) {
     const diff = now.getTime() - date.getTime();
     
     if (diff < 60000) {
-      return 'Just now';
+            return 'Just now';
     } else if (diff < 3600000) {
-            const minutes = Math.floor(diff / 60000);
+      const minutes = Math.floor(diff / 60000);
       return `${minutes}m ago`;
     } else if (diff < 86400000) {
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -2572,7 +2580,11 @@ window.answerIncomingCall = async function() {
   
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ 
-      audio: true, 
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }, 
       video: false 
     });
     
@@ -2587,6 +2599,10 @@ window.answerIncomingCall = async function() {
       status: 'connected',
       answeredAt: serverTimestamp()
     });
+    
+    // Setup ICE candidate exchange
+    setupIceCandidateExchange(currentCallId);
+    monitorCallStatus(currentCallId);
     
     showCallInterface('connected', currentCallData.callerName, currentCallData.callerName.charAt(0).toUpperCase());
     
@@ -2624,13 +2640,21 @@ window.startAudioCall = async function() {
   
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ 
-      audio: true, 
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }, 
       video: false 
     });
     
     currentCallId = generateCallId();
     await createPeerConnection();
     await createAndSendOffer();
+    
+    // Setup ICE candidate exchange
+    setupIceCandidateExchange(currentCallId);
+    monitorCallStatus(currentCallId);
     
     showCallInterface('calling', currentChatUser.name, currentChatUser.name.charAt(0).toUpperCase());
     
@@ -2658,10 +2682,17 @@ async function createPeerConnection() {
   }
   
   peerConnection.ontrack = (event) => {
-    remoteStream = event.streams[0];
-    const remoteAudio = new Audio();
-    remoteAudio.srcObject = remoteStream;
-    remoteAudio.play().catch(e => console.log('Error playing remote audio:', e));
+    console.log('Received remote track:', event.streams);
+    if (event.streams && event.streams[0]) {
+      remoteStream = event.streams[0];
+      
+      const remoteAudio = document.getElementById('remoteAudio');
+      remoteAudio.srcObject = remoteStream;
+      
+      remoteAudio.play().catch(e => {
+        console.log('Auto-play prevented, trying user interaction:', e);
+      });
+    }
   };
   
   peerConnection.onicecandidate = (event) => {
@@ -2701,6 +2732,26 @@ async function createAndSendOffer() {
   await setDoc(doc(db, "calls", currentCallId), callData);
 }
 
+// Setup ICE candidate exchange
+function setupIceCandidateExchange(callId) {
+  const candidatesRef = collection(db, "calls", callId, "candidates");
+  
+  onSnapshot(candidatesRef, (snapshot) => {
+    snapshot.docChanges().forEach((change) => {
+      if (change.type === "added") {
+        const candidateData = change.doc.data();
+        try {
+          if (peerConnection && candidateData.candidate) {
+            peerConnection.addIceCandidate(new RTCIceCandidate(candidateData.candidate));
+          }
+        } catch (error) {
+          console.error('Error adding ICE candidate:', error);
+        }
+      }
+    });
+  });
+}
+
 // Save ICE candidate
 async function saveIceCandidate(candidate) {
   if (!currentCallId) return;
@@ -2713,6 +2764,37 @@ async function saveIceCandidate(candidate) {
   } catch (error) {
     console.error('Error saving ICE candidate:', error);
   }
+}
+
+// Monitor call status
+function monitorCallStatus(callId) {
+  const callRef = doc(db, "calls", callId);
+  
+  onSnapshot(callRef, (doc) => {
+    if (doc.exists()) {
+      const callData = doc.data();
+      console.log('Call status update:', callData.status);
+      
+      if (callData.status === 'rejected' || callData.status === 'ended') {
+        endCall();
+      } else if (callData.status === 'connected' && peerConnection) {
+        loadRemoteCandidates(callId);
+      }
+    }
+  });
+}
+
+// Load remote candidates
+async function loadRemoteCandidates(callId) {
+  const candidatesRef = collection(db, "calls", callId, "candidates");
+  const querySnapshot = await getDocs(candidatesRef);
+  
+  querySnapshot.forEach((doc) => {
+    const candidateData = doc.data();
+    if (peerConnection && candidateData.candidate) {
+      peerConnection.addIceCandidate(new RTCIceCandidate(candidateData.candidate));
+    }
+  });
 }
 
 // Show call interface
