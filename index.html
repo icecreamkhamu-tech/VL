@@ -1261,8 +1261,39 @@ footer {
   justify-content: center;
 }
 
-/* Audio Element for Remote Stream */
-#remoteAudio {
+/* Ringtone Animations */
+.ringing-animation {
+  animation: ringPulse 1.5s infinite;
+}
+
+@keyframes ringPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 65, 108, 0.7);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 15px rgba(255, 65, 108, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 65, 108, 0);
+  }
+}
+
+.call-status-ringing {
+  color: #ff9800 !important;
+  font-weight: bold;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0.3; }
+}
+
+/* Audio Elements */
+#remoteAudio, #callerRingingAudio, #receiverRingtoneAudio {
   display: none;
 }
 
@@ -1384,7 +1415,8 @@ footer {
     <input type="password" id="loginPassword" placeholder="Password">
     <span class="eye-icon" onclick="togglePassword('loginPassword')">👁️</span>
   </div>
-  <button onclick="login()">Login</button>
+  
+    <button onclick="login()">Login</button>
   <p><a href="#" onclick="showPage('forgotPage')">Forgot Password?</a></p>
   <p>Don't have an account? <a href="#" onclick="showPage('signupPage')">Sign Up</a></p>
 </div>
@@ -1404,7 +1436,7 @@ footer {
     <span class="eye-icon" onclick="togglePassword('signupPassword')">👁️</span>
   </div>
   <button onclick="signup()">Sign Up</button>
-    <a href="#" class="back-btn" onclick="showPage('loginPage')">← Back to Login</a>
+  <a href="#" class="back-btn" onclick="showPage('loginPage')">← Back to Login</a>
 </div>
 
 <!-- Forgot Password Page -->
@@ -1644,8 +1676,14 @@ footer {
   </div>
 </div>
 
-<!-- Audio Element for Remote Stream -->
-<audio id="remoteAudio" autoplay></audio>
+<!-- Audio Elements for Ringtone System -->
+<audio id="remoteAudio" autoplay playsinline style="display: none;"></audio>
+<audio id="callerRingingAudio" loop preload="auto" style="display: none;">
+  <source src="https://assets.mixkit.co/active_storage/sfx/250/250-preview.mp3" type="audio/mpeg">
+</audio>
+<audio id="receiverRingtoneAudio" loop preload="auto" style="display: none;">
+  <source src="https://assets.mixkit.co/active_storage/sfx/258/258-preview.mp3" type="audio/mpeg">
+</audio>
 
 <footer>© 2025 GEN-Z Chat • All rights reserved</footer>
 
@@ -1708,6 +1746,11 @@ let isMuted = false;
 let isSpeakerOn = false;
 let currentCallData = null;
 
+// Ringtone System Variables
+let callerRingingAudio = null;
+let receiverRingtoneAudio = null;
+let isRinging = false;
+
 // Badge points generator function
 function generateBadgePoints() {
   function starPoints(cx, cy, spikes, outerR, innerR, startDeg = -90){
@@ -1747,6 +1790,83 @@ const verifiedBadgeHTML = `
   </span>
 `;
 
+// ==================== RINGTONE SYSTEM ====================
+
+// Ringtone Initialization
+function initializeRingtones() {
+  // Caller ringing tone (for your device)
+  callerRingingAudio = document.getElementById('callerRingingAudio');
+  if (!callerRingingAudio) {
+    callerRingingAudio = document.createElement('audio');
+    callerRingingAudio.id = 'callerRingingAudio';
+    callerRingingAudio.loop = true;
+    callerRingingAudio.preload = 'auto';
+    callerRingingAudio.innerHTML = '<source src="https://assets.mixkit.co/active_storage/sfx/250/250-preview.mp3" type="audio/mpeg">';
+    document.body.appendChild(callerRingingAudio);
+  }
+  
+  // Receiver ringtone (for other user's device)
+  receiverRingtoneAudio = document.getElementById('receiverRingtoneAudio');
+  if (!receiverRingtoneAudio) {
+    receiverRingtoneAudio = document.createElement('audio');
+    receiverRingtoneAudio.id = 'receiverRingtoneAudio';
+    receiverRingtoneAudio.loop = true;
+    receiverRingtoneAudio.preload = 'auto';
+    receiverRingtoneAudio.innerHTML = '<source src="https://assets.mixkit.co/active_storage/sfx/258/258-preview.mp3" type="audio/mpeg">';
+    document.body.appendChild(receiverRingtoneAudio);
+  }
+  
+  console.log('🎵 All ringtones initialized');
+}
+
+// Caller ringing tone start (for your device)
+async function startCallerRinging() {
+  if (!callerRingingAudio) initializeRingtones();
+  
+  try {
+    callerRingingAudio.currentTime = 0;
+    callerRingingAudio.volume = 0.6;
+    await callerRingingAudio.play();
+    isRinging = true;
+    console.log('🔊 Caller ringing tone started (your device)');
+  } catch (error) {
+    console.error('Error playing caller ringing tone:', error);
+  }
+}
+
+// Receiver ringtone start (for other user's device)
+async function startReceiverRingtone() {
+  if (!receiverRingtoneAudio) initializeRingtones();
+  
+  try {
+    receiverRingtoneAudio.currentTime = 0;
+    receiverRingtoneAudio.volume = 0.8;
+    await receiverRingtoneAudio.play();
+    isRinging = true;
+    console.log('🔔 Receiver ringtone started (other user device)');
+  } catch (error) {
+    console.error('Error playing receiver ringtone:', error);
+  }
+}
+
+// Stop all ringtones
+function stopAllRingtones() {
+  if (callerRingingAudio) {
+    callerRingingAudio.pause();
+    callerRingingAudio.currentTime = 0;
+  }
+  
+  if (receiverRingtoneAudio) {
+    receiverRingtoneAudio.pause();
+    receiverRingtoneAudio.currentTime = 0;
+  }
+  
+  isRinging = false;
+  console.log('🔕 All ringtones stopped');
+}
+
+// ==================== AUTH & BASIC FUNCTIONS ====================
+
 // Check auth state
 onAuthStateChanged(auth, (user) => {
   if (user) {
@@ -1759,6 +1879,8 @@ onAuthStateChanged(auth, (user) => {
     setupConversationsListener();
     setupOnlineStatusListener();
     setupCallListener();
+    initializeRingtones();
+    setupAudioDebugging();
   } else {
     setUserOnlineStatus(false);
     console.log("User logged out");
@@ -2246,8 +2368,7 @@ function loadMessages(conversationId) {
     }
     
     snapshot.forEach((doc) => {
-      const message = doc.data();
-      addMessageToChat(message.text, formatTime(message.timestamp), message.senderId === currentUser.uid ? 'me' : 'them');
+      const message = doc.data();      addMessageToChat(message.text, formatTime(message.timestamp), message.senderId === currentUser.uid ? 'me' : 'them');
     });
     
     scrollToBottom();
@@ -2385,7 +2506,7 @@ function formatTime(timestamp) {
     const diff = now.getTime() - date.getTime();
     
     if (diff < 60000) {
-            return 'Just now';
+      return 'Just now';
     } else if (diff < 3600000) {
       const minutes = Math.floor(diff / 60000);
       return `${minutes}m ago`;
@@ -2406,24 +2527,6 @@ function scrollToBottom() {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }, 100);
 }
-
-// Handle page visibility change
-document.addEventListener('visibilitychange', function() {
-  if (currentUser) {
-    if (document.hidden) {
-      setUserOnlineStatus(false);
-    } else {
-      setUserOnlineStatus(true);
-    }
-  }
-});
-
-// Handle page unload
-window.addEventListener('beforeunload', function() {
-  if (currentUser) {
-    setUserOnlineStatus(false);
-  }
-});
 
 // Verification System Functions
 window.openVerificationModal = function() {
@@ -2545,7 +2648,12 @@ async function handleIncomingCall(callData, callDocId) {
   currentCallData = callData;
   currentCallId = callDocId;
   
+  // Start receiver ringtone (other user's device)
+  startReceiverRingtone();
+  
   showIncomingCallNotification(callData);
+  
+  console.log('🔔 Incoming call - ringtone playing on receiver device');
 }
 
 // Show incoming call notification
@@ -2557,11 +2665,17 @@ function showIncomingCallNotification(callData) {
   avatar.textContent = callData.callerName.charAt(0).toUpperCase();
   name.textContent = callData.callerName;
   
+  // Add ringing animation
+  avatar.classList.add('ringing-animation');
+  
   notification.style.display = 'block';
+  
+  console.log('🔔 Incoming call notification shown');
   
   // Auto reject after 30 seconds
   setTimeout(() => {
     if (notification.style.display !== 'none') {
+      console.log('⏰ Auto-rejecting call after 30 seconds');
       rejectIncomingCall();
     }
   }, 30000);
@@ -2569,34 +2683,53 @@ function showIncomingCallNotification(callData) {
 
 // Hide incoming call notification
 function hideIncomingCallNotification() {
-  document.getElementById('incomingCallNotification').style.display = 'none';
+  const notification = document.getElementById('incomingCallNotification');
+  const avatar = document.getElementById('incomingCallAvatar');
+  
+  avatar.classList.remove('ringing-animation');
+  notification.style.display = 'none';
 }
 
 // Answer incoming call
 window.answerIncomingCall = async function() {
   if (!currentCallData || !currentCallId) return;
   
+  // Stop receiver ringtone
+  stopAllRingtones();
   hideIncomingCallNotification();
   
   try {
+    console.log('📞 Answering call...');
+    
     localStream = await navigator.mediaDevices.getUserMedia({ 
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
-        autoGainControl: true
+        autoGainControl: true,
+        channelCount: 1,
+        sampleRate: 48000,
+        sampleSize: 16
       }, 
       video: false 
     });
     
+    console.log('🎤 Microphone access granted for answering');
+    
     await createPeerConnection();
-    await peerConnection.setRemoteDescription(currentCallData.offer);
+    
+    if (currentCallData.offer) {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(currentCallData.offer));
+      console.log('Remote description set successfully');
+    }
     
     const answer = await peerConnection.createAnswer();
     await peerConnection.setLocalDescription(answer);
+    console.log('Local description set:', answer.type);
     
+    // Update status to 'answered' to stop caller ringing tone
     await updateDoc(doc(db, "calls", currentCallId), {
       answer: answer,
-      status: 'connected',
+      status: 'answered',
       answeredAt: serverTimestamp()
     });
     
@@ -2608,13 +2741,23 @@ window.answerIncomingCall = async function() {
     
   } catch (error) {
     console.error('Error answering call:', error);
-    alert('Error answering call. Please check microphone permissions.');
+    stopAllRingtones();
+    
+    if (error.name === 'NotAllowedError') {
+      alert('Microphone permission denied. Please allow microphone access to answer the call.');
+    } else {
+      alert('Error answering call: ' + error.message);
+    }
+    
     endCall();
   }
 }
 
 // Reject incoming call
 window.rejectIncomingCall = async function() {
+  console.log('Call rejected by user');
+  stopAllRingtones();
+  
   if (currentCallId) {
     await updateDoc(doc(db, "calls", currentCallId), {
       status: 'rejected',
@@ -2639,28 +2782,49 @@ window.startAudioCall = async function() {
   }
   
   try {
+    console.log('📞 Starting audio call...');
+    
     localStream = await navigator.mediaDevices.getUserMedia({ 
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
-        autoGainControl: true
+        autoGainControl: true,
+        channelCount: 1,
+        sampleRate: 48000,
+        sampleSize: 16
       }, 
       video: false 
     });
+    
+    console.log('🎤 Microphone access granted');
     
     currentCallId = generateCallId();
     await createPeerConnection();
     await createAndSendOffer();
     
-    // Setup ICE candidate exchange
+    // Start caller ringing tone (your device)
+    startCallerRinging();
+    
+    // ICE candidate exchange setup
     setupIceCandidateExchange(currentCallId);
     monitorCallStatus(currentCallId);
     
+    // Show calling UI
     showCallInterface('calling', currentChatUser.name, currentChatUser.name.charAt(0).toUpperCase());
+    
+    console.log('🎵 Caller ringing tone playing on your device');
     
   } catch (error) {
     console.error('Error starting call:', error);
-    alert('Error starting audio call. Please check microphone permissions.');
+    stopAllRingtones();
+    
+    if (error.name === 'NotAllowedError') {
+      alert('Microphone permission denied. Please allow microphone access and try again.');
+    } else if (error.name === 'NotFoundError') {
+      alert('No microphone found. Please check your audio device.');
+    } else {
+      alert('Error starting audio call: ' + error.message);
+    }
   }
 }
 
@@ -2668,49 +2832,158 @@ window.startAudioCall = async function() {
 async function createPeerConnection() {
   const configuration = {
     iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' }
-    ]
+      { 
+        urls: [
+          'stun:stun.l.google.com:19302',
+          'stun:stun1.l.google.com:19302',
+          'stun:stun2.l.google.com:19302'
+        ]
+      }
+    ],
+    iceCandidatePoolSize: 10,
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require'
   };
   
   peerConnection = new RTCPeerConnection(configuration);
   
+  // Add local stream tracks
   if (localStream) {
     localStream.getTracks().forEach(track => {
+      console.log('Adding local track:', track.kind);
       peerConnection.addTrack(track, localStream);
     });
   }
   
+  // Remote stream handling
   peerConnection.ontrack = (event) => {
-    console.log('Received remote track:', event.streams);
-    if (event.streams && event.streams[0]) {
+    console.log('🚨 REMOTE TRACK RECEIVED:', event);
+    
+    if (event.streams && event.streams.length > 0) {
       remoteStream = event.streams[0];
+      console.log('Remote stream found with tracks:', remoteStream.getTracks());
       
-      const remoteAudio = document.getElementById('remoteAudio');
-      remoteAudio.srcObject = remoteStream;
-      
-      remoteAudio.play().catch(e => {
-        console.log('Auto-play prevented, trying user interaction:', e);
-      });
+      // Setup remote audio
+      setupRemoteAudio(remoteStream);
+    } else if (event.track) {
+      console.log('Direct track received');
+      remoteStream = new MediaStream([event.track]);
+      setupRemoteAudio(remoteStream);
     }
   };
   
+  // ICE candidate handling
   peerConnection.onicecandidate = (event) => {
     if (event.candidate && currentCallId) {
+      console.log('New ICE candidate:', event.candidate);
       saveIceCandidate(event.candidate);
     }
   };
   
+  // Connection state monitoring
   peerConnection.onconnectionstatechange = (event) => {
-    console.log('Connection state:', peerConnection.connectionState);
-    if (peerConnection.connectionState === 'connected') {
-      console.log('Call connected successfully');
-    } else if (peerConnection.connectionState === 'disconnected' || 
-               peerConnection.connectionState === 'failed') {
-      console.log('Call disconnected');
-      endCall();
+    console.log('Connection state changed:', peerConnection.connectionState);
+    const callStatus = document.getElementById('callStatus');
+    
+    switch(peerConnection.connectionState) {
+      case 'connected':
+        console.log('Call connected successfully!');
+        callStatus.textContent = 'Connected';
+        break;
+      case 'disconnected':
+        console.log('Call disconnected');
+        callStatus.textContent = 'Disconnected';
+        break;
+      case 'failed':
+        console.log('Call failed');
+        callStatus.textContent = 'Failed';
+        endCall();
+        break;
+      case 'closed':
+        console.log('Call closed');
+        break;
     }
   };
+  
+  // ICE connection state monitoring
+  peerConnection.oniceconnectionstatechange = (event) => {
+    console.log('ICE connection state:', peerConnection.iceConnectionState);
+  };
+}
+
+// Setup remote audio
+function setupRemoteAudio(stream) {
+  console.log('🎵 Setting up remote audio...');
+  
+  let remoteAudio = document.getElementById('remoteAudio');
+  
+  if (!remoteAudio) {
+    remoteAudio = document.createElement('audio');
+    remoteAudio.id = 'remoteAudio';
+    document.body.appendChild(remoteAudio);
+    console.log('New audio element created');
+  }
+  
+  // Configure audio element
+  remoteAudio.srcObject = stream;
+  remoteAudio.autoplay = true;
+  remoteAudio.playsInline = true;
+  remoteAudio.controls = false;
+  remoteAudio.style.display = 'none';
+  remoteAudio.volume = 1.0;
+  remoteAudio.muted = false;
+  
+  console.log('Audio element configured');
+  
+  // Audio events monitoring
+  remoteAudio.addEventListener('loadedmetadata', () => {
+    console.log('✅ Remote audio metadata loaded');
+  });
+  
+  remoteAudio.addEventListener('canplay', () => {
+    console.log('✅ Remote audio can play now');
+    playRemoteAudio(remoteAudio);
+  });
+  
+  remoteAudio.addEventListener('play', () => {
+    console.log('🎉 REMOTE AUDIO IS PLAYING!');
+    document.getElementById('callStatus').textContent = 'Connected - Audio Active';
+  });
+  
+  // Direct play attempt
+  setTimeout(() => {
+    playRemoteAudio(remoteAudio);
+  }, 1000);
+}
+
+// Play remote audio
+function playRemoteAudio(audioElement) {
+  console.log('🎵 Attempting to play remote audio...');
+  
+  const playPromise = audioElement.play();
+  
+  if (playPromise !== undefined) {
+    playPromise
+      .then(() => {
+        console.log('🎉 Remote audio playback started successfully!');
+        audioElement.volume = 1.0;
+        audioElement.muted = false;
+      })
+      .catch(error => {
+        console.error('❌ Auto-play failed:', error);
+        
+        // Wait for user interaction
+        document.addEventListener('click', function userInteractionHandler() {
+          console.log('🖱️ User interaction detected, retrying audio play...');
+          audioElement.play()
+            .then(() => {
+              console.log('✅ Audio playback started after user interaction');
+              document.removeEventListener('click', userInteractionHandler);
+            })
+            .catch(e => console.error('❌ Still cannot play audio:', e));
+        }, { once: true });
+      });
+  }
 }
 
 // Create and send offer
@@ -2726,10 +2999,12 @@ async function createAndSendOffer() {
     receiverName: currentChatUser.name,
     callId: currentCallId,
     timestamp: serverTimestamp(),
-    status: 'calling'
+    status: 'calling',
+    callerRinging: true
   };
   
   await setDoc(doc(db, "calls", currentCallId), callData);
+  console.log('📞 Call offer sent to receiver');
 }
 
 // Setup ICE candidate exchange
@@ -2775,10 +3050,26 @@ function monitorCallStatus(callId) {
       const callData = doc.data();
       console.log('Call status update:', callData.status);
       
-      if (callData.status === 'rejected' || callData.status === 'ended') {
-        endCall();
-      } else if (callData.status === 'connected' && peerConnection) {
+      if (callData.status === 'connected') {
+        // Call connected - stop all ringtones
+        stopAllRingtones();
+        console.log('✅ Call connected - ringtones stopped on both devices');
+        
+        // Load remote candidates
         loadRemoteCandidates(callId);
+        
+      } else if (callData.status === 'rejected' || callData.status === 'ended') {
+        // Call rejected/ended - stop all ringtones
+        stopAllRingtones();
+        console.log('❌ Call ended - ringtones stopped');
+        endCall();
+      } else if (callData.status === 'answered') {
+        // Call answered - stop caller ringing tone only
+        if (callerRingingAudio) {
+          callerRingingAudio.pause();
+          callerRingingAudio.currentTime = 0;
+        }
+        console.log('📞 Call answered - caller ringing stopped');
       }
     }
   });
@@ -2807,17 +3098,33 @@ function showCallInterface(status, userName, userInitial) {
   
   callUserName.textContent = userName;
   callUserAvatar.textContent = userInitial;
-  callStatus.textContent = status === 'calling' ? 'Calling...' : 'In Call';
+  
+  // Remove ringing animation
+  callUserAvatar.classList.remove('ringing-animation');
   
   if (status === 'calling') {
+    callStatus.textContent = 'Calling...';
+    callStatus.className = 'call-status-ringing';
+    
+    // Add ringing animation to caller avatar
+    callUserAvatar.classList.add('ringing-animation');
+    
     callControls.innerHTML = `
-      <button class="call-control-btn end-call-btn" onclick="endCall()">📵</button>
+      <button class="call-control-btn end-call-btn" onclick="endCall()" title="Cancel Call">📵</button>
     `;
   } else {
+    callStatus.textContent = 'Connected - Audio Starting...';
+    callStatus.className = '';
+    callStatus.style.color = '#4CAF50';
+    
     callControls.innerHTML = `
-      <button class="call-control-btn mute-btn ${isMuted ? 'muted' : ''}" onclick="toggleMute()">🎤</button>
-      <button class="call-control-btn end-call-btn" onclick="endCall()">📵</button>
-      <button class="call-control-btn speaker-btn ${isSpeakerOn ? 'active' : ''}" onclick="toggleSpeaker()">🔊</button>
+      <button class="call-control-btn mute-btn ${isMuted ? 'muted' : ''}" onclick="toggleMute()" title="${isMuted ? 'Unmute' : 'Mute'}">
+        ${isMuted ? '🎤❌' : '🎤'}
+      </button>
+      <button class="call-control-btn end-call-btn" onclick="endCall()" title="End Call">📵</button>
+      <button class="call-control-btn speaker-btn ${isSpeakerOn ? 'active' : ''}" onclick="toggleSpeaker()" title="${isSpeakerOn ? 'Mute Speaker' : 'Unmute Speaker'}">
+        ${isSpeakerOn ? '🔊' : '🔇'}
+      </button>
     `;
     
     startCallTimer();
@@ -2857,16 +3164,33 @@ window.toggleMute = function() {
 
 // Toggle speaker
 window.toggleSpeaker = function() {
-  isSpeakerOn = !isSpeakerOn;
+  const remoteAudio = document.getElementById('remoteAudio');
   
-  const speakerBtn = document.querySelector('.speaker-btn');
-  if (speakerBtn) {
-    speakerBtn.classList.toggle('active', isSpeakerOn);
+  if (remoteAudio && remoteAudio.srcObject) {
+    isSpeakerOn = !isSpeakerOn;
+    remoteAudio.muted = !isSpeakerOn;
+    
+    const speakerBtn = document.querySelector('.speaker-btn');
+    if (speakerBtn) {
+      speakerBtn.classList.toggle('active', isSpeakerOn);
+      speakerBtn.innerHTML = isSpeakerOn ? '🔊' : '🔇';
+    }
+    
+    console.log('Speaker ' + (isSpeakerOn ? 'ON' : 'OFF'));
+    console.log('Audio muted:', remoteAudio.muted);
+    
+    document.getElementById('callStatus').textContent = 
+      isSpeakerOn ? 'Connected - Speaker On' : 'Connected - Speaker Off';
   }
 }
 
 // End call
 window.endCall = async function() {
+  console.log('📞 Ending call...');
+  
+  // Stop all ringtones
+  stopAllRingtones();
+  
   if (callTimerInterval) {
     clearInterval(callTimerInterval);
     callTimerInterval = null;
@@ -2894,6 +3218,8 @@ window.endCall = async function() {
   
   document.getElementById('callInterface').classList.remove('active');
   resetCallVariables();
+  
+  console.log('✅ Call ended completely');
 }
 
 // Reset call variables
@@ -2926,6 +3252,33 @@ async function rejectCall(callDocId) {
   }
 }
 
+// Audio debugging setup
+function setupAudioDebugging() {
+  const remoteAudio = document.getElementById('remoteAudio');
+  if (!remoteAudio) return;
+  
+  const audioEvents = [
+    'loadstart', 'progress', 'suspend', 'abort', 'error',
+    'emptied', 'stalled', 'loadedmetadata', 'loadeddata',
+    'canplay', 'canplaythrough', 'playing', 'waiting',
+    'seeking', 'seeked', 'ended', 'durationchange',
+    'timeupdate', 'play', 'pause', 'ratechange',
+    'volumechange'
+  ];
+  
+  audioEvents.forEach(event => {
+    remoteAudio.addEventListener(event, (e) => {
+      console.log(`🎵 Audio Event: ${event}`, {
+        readyState: remoteAudio.readyState,
+        currentTime: remoteAudio.currentTime,
+        volume: remoteAudio.volume,
+        muted: remoteAudio.muted,
+        paused: remoteAudio.paused
+      });
+    });
+  });
+}
+
 // Logout function
 window.logout = async function() {
   try {
@@ -2946,11 +3299,34 @@ window.logout = async function() {
     userProfileData = null;
     onlineUsers.clear();
     resetCallVariables();
+    stopAllRingtones();
     console.log("User logged out successfully");
   } catch (e) {
     console.error("Logout error:", e);
   }
 };
+
+// Test functions for ringtones
+window.testCallerRinging = function() {
+  startCallerRinging();
+  console.log('🔊 Caller ringing tone playing on YOUR device');
+}
+
+window.testReceiverRingtone = function() {
+  startReceiverRingtone();
+  console.log('🔔 Receiver ringtone playing (like other user device)');
+}
+
+window.testBothRingtones = function() {
+  startCallerRinging();
+  startReceiverRingtone();
+  console.log('🎵 Both ringtones playing - simulating real call');
+}
+
+window.stopTestRingtones = function() {
+  stopAllRingtones();
+  console.log('🔕 All ringtones stopped');
+}
 
 // Error handling
 window.addEventListener('error', function(e) {
@@ -2965,7 +3341,8 @@ if (document.readyState === 'loading') {
 }
 
 // Initialize the app
-console.log("GEN-Z Chat Messenger with Audio Calls initialized");
+console.log("🎉 GEN-Z Chat Messenger with Complete Audio Call System initialized");
+console.log("🔊 Features: Dual Ringtone System, Real-time Calls, Verified Badges, Online Status");
 </script>
 </body>
 </html>
